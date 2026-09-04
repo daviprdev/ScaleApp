@@ -1,0 +1,16 @@
+{
+  "name": "scaleapp",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r run typecheck",
+    "build": "pnpm -r run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
