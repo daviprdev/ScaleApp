@@ -193,8 +193,22 @@ um incidente real de produção documentado no histórico do projeto anterior:
    e dashboard "ScaleApp — Visão geral" provisionados. Grafana em
    `localhost:3001` (admin/admin por padrão). API expõe `/metrics` na
    `API_PORT`; worker na `WORKER_METRICS_PORT` (9101).
-6. **Driver Graph API real, cobrindo operações do fluxo core.** _(próxima fase)_
-7. Validação em pequena escala antes de paralelizar.
+6. ✅ **Driver Graph API real, cobrindo operações do fluxo core.**
+   `packages/driver-graph` implementa a porta `AutomationDriver` para
+   `graph_api`: publish_media (container→publish, com polling de vídeo e
+   carrossel), publish_story, fetch_insights, refresh_session, warmup_action.
+   Não cobre Destaques nem aquisição (`supports()` false → registry roteia a
+   outro driver). Toda I/O passa por **portas injetadas** (HttpClient/Credential/
+   Proxy/Media) — os módulos 8/9 e a biblioteca de mídia as implementam depois;
+   por ora há stubs de dev (`devResolvers.ts`). Mapeamento de erro Meta →
+   `FailureClass` (regras 2 e 3: 190/subcódigos → Checkpoint vs TokenDead;
+   4/17/32/429 → RateLimited; 5xx/1/2 → PlatformOutage; transporte via proxy →
+   ProxyError). Migration `0004` adiciona `accounts.ig_user_id`. Worker usa o
+   driver real com `WORKER_GRAPH_DRIVER=1` (mock continua o default). Validado
+   com HttpClient fake (13 testes); **ainda não posta de verdade** — falta
+   credenciais Meta + módulos 8/9 + biblioteca de mídia (ver passo 7).
+7. **Validação em pequena escala antes de paralelizar.** _(próxima fase — exige
+   credenciais Meta reais; é aqui que o driver Graph faz a primeira postagem)_
 8. Driver Playwright pro que a API não cobre (Destaques etc.).
 9. Content Acquisition Driver (contas dedicadas de scraping).
 10. Escala horizontal de workers.

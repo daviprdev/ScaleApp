@@ -18,6 +18,12 @@ export interface WorkerConfig {
   readonly driverClasses: readonly DriverClass[];
   /** Porta do endpoint /metrics (Prometheus) exposto por este worker. */
   readonly metricsPort: number;
+  /**
+   * Usa o driver Graph API real para a classe graph_api (senão, driver mock).
+   * Default false: o mock continua o padrão até haver credenciais/resolvers
+   * reais (Sessão/Proxy/Mídia). Ligar com WORKER_GRAPH_DRIVER=1.
+   */
+  readonly useGraphDriver: boolean;
 }
 
 function parseDriverClasses(raw: string | undefined): DriverClass[] {
@@ -42,5 +48,6 @@ export function loadWorkerConfig(): WorkerConfig {
     concurrency: Number(process.env.WORKER_CONCURRENCY ?? "5"),
     driverClasses: parseDriverClasses(process.env.WORKER_DRIVER_CLASSES),
     metricsPort: Number(process.env.WORKER_METRICS_PORT ?? "9101"),
+    useGraphDriver: process.env.WORKER_GRAPH_DRIVER === "1",
   };
 }

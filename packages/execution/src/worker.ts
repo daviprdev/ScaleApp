@@ -113,6 +113,7 @@ export function createJobWorker(opts: CreateJobWorkerOptions): Worker<JobQueueDa
       metaAppId: contextRow.metaAppId as MetaAppId,
       proxyId: contextRow.proxyId as ProxyId,
       accessTokenRef: contextRow.accessTokenRef ?? "mock-token",
+      ...(contextRow.igUserId !== null ? { igUserId: contextRow.igUserId } : {}),
     };
 
     const request: DriverOperationRequest<DriverOperationKind> = {

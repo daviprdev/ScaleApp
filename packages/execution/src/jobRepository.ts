@@ -99,6 +99,8 @@ export interface DriverContextRow {
   readonly metaAppId: string;
   readonly proxyId: string;
   readonly accessTokenRef: string | null;
+  /** Id numérico da conta IG Business (Graph API); null até ser resolvido. */
+  readonly igUserId: string | null;
 }
 
 export class JobRepository {
@@ -232,8 +234,9 @@ export class JobRepository {
       meta_app_id: string;
       proxy_id: string;
       access_token_ref: string | null;
+      ig_user_id: string | null;
     }>(
-      `SELECT a.id AS account_id, a.meta_app_id, a.proxy_id, a.access_token_ref
+      `SELECT a.id AS account_id, a.meta_app_id, a.proxy_id, a.access_token_ref, a.ig_user_id
        FROM jobs j JOIN accounts a ON a.id = j.account_id
        WHERE j.id = $1`,
       [jobId],
@@ -245,6 +248,7 @@ export class JobRepository {
       metaAppId: row.meta_app_id,
       proxyId: row.proxy_id,
       accessTokenRef: row.access_token_ref,
+      igUserId: row.ig_user_id,
     };
   }
 }

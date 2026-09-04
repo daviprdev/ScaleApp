@@ -51,6 +51,9 @@ importers:
       '@scaleapp/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@scaleapp/driver-graph':
+        specifier: workspace:*
+        version: link:../../packages/driver-graph
       '@scaleapp/driver-mock':
         specifier: workspace:*
         version: link:../../packages/driver-mock
@@ -95,6 +98,25 @@ importers:
 
   packages/domain:
     devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/driver-graph:
+    dependencies:
+      '@scaleapp/domain':
+        specifier: workspace:*
+        version: link:../domain
+      undici:
+        specifier: ^6.21.0
+        version: 6.28.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.13
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
@@ -760,6 +782,10 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
+  undici@6.28.1:
+    resolution: {integrity: sha512-zWpdTVD54H48CIybL0rWQ3ukpb9d23wM7eH5RtfdmeP70cWHNjtfo7P4vZX+5CoDcO53J4Pu5uXp7lNfjc6DRA==}
+    engines: {node: '>=18.17'}
+
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
@@ -1267,6 +1293,8 @@ snapshots:
   typescript@5.9.3: {}
 
   undici-types@6.21.0: {}
+
+  undici@6.28.1: {}
 
   wrappy@1.0.2: {}
 

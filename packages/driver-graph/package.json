@@ -1,23 +1,24 @@
 {
-  "name": "@scaleapp/worker",
+  "name": "@scaleapp/driver-graph",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
-    "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js"
+    "test": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
-    "@scaleapp/db": "workspace:*",
     "@scaleapp/domain": "workspace:*",
-    "@scaleapp/driver-graph": "workspace:*",
-    "@scaleapp/driver-mock": "workspace:*",
-    "@scaleapp/execution": "workspace:*",
-    "@scaleapp/observability": "workspace:*",
-    "bullmq": "^5.34.0"
+    "undici": "^6.21.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

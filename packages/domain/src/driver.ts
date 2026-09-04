@@ -182,6 +182,13 @@ export interface DriverExecutionContext {
   readonly proxyId: ProxyId;
   /** Token resolvido pelo Session Manager — referência ao cofre. */
   readonly accessTokenRef: string;
+  /**
+   * Id numérico da conta IG Business, endereço da conta na Graph API
+   * (/{ig-user-id}/media). Ausente até a conta ser convertida/resolvida; o
+   * driver Graph trata ausência como InvalidInput. Drivers que não usam a Graph
+   * API (Playwright, Content Acquisition) ignoram este campo.
+   */
+  readonly igUserId?: string;
 }
 
 export interface DriverOperationRequest<K extends DriverOperationKind> {

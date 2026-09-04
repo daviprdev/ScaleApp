@@ -8,7 +8,15 @@
  */
 
 import { createPool } from "@scaleapp/db";
+import { DriverClass } from "@scaleapp/domain";
 import { InMemoryDriverRegistry, MockDriver } from "@scaleapp/driver-mock";
+import {
+  DbAccountProxyResolver,
+  EnvCredentialResolver,
+  GraphApiDriver,
+  UndiciHttpClient,
+  UrlMediaResolver,
+} from "@scaleapp/driver-graph";
 import {
   createJobWorker,
   createLogger,
@@ -29,10 +37,24 @@ async function main(): Promise<void> {
   const logger = createLogger("worker");
   const pool = createPool(config.databaseUrl);
 
-  // Registry com um driver mock por classe configurada.
+  // Registry: um driver por classe. Para graph_api, usa o driver Graph API real
+  // quando WORKER_GRAPH_DRIVER=1 (com resolvers de dev); senão, o mock. As
+  // demais classes seguem no mock (Playwright/Content Acquisition virão depois).
   const registry = new InMemoryDriverRegistry();
   for (const driverClass of config.driverClasses) {
-    registry.register(new MockDriver(driverClass));
+    if (driverClass === DriverClass.GraphApi && config.useGraphDriver) {
+      registry.register(
+        new GraphApiDriver({
+          http: new UndiciHttpClient(),
+          credentials: new EnvCredentialResolver(),
+          proxies: new DbAccountProxyResolver(pool),
+          media: new UrlMediaResolver(),
+        }),
+      );
+      logger.info({ driverClass }, "driver Graph API real registrado");
+    } else {
+      registry.register(new MockDriver(driverClass));
+    }
   }
 
   const connections: Redis[] = [];
