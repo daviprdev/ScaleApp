@@ -1,0 +1,33 @@
+{
+  "name": "@scaleapp/orchestrator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts"
+  },
+  "dependencies": {
+    "@scaleapp/db": "workspace:*",
+    "@scaleapp/domain": "workspace:*",
+    "@scaleapp/execution": "workspace:*"
+  },
+  "devDependencies": {
+    "@scaleapp/driver-mock": "workspace:*",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "bullmq": "^5.34.0",
+    "pg": "^8.13.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -175,12 +175,18 @@ um incidente real de produção documentado no histórico do projeto anterior:
 
 ## Roadmap de implementação
 
-1. **Contratos do domínio** — `Account`, `Job`, `Pipeline`, `Execution`,
-   `AutomationDriver`, `ContentSource`. _(próxima fase)_
-2. Infra base: Postgres + Redis + API mínima de contas via Docker Compose.
-3. Fila + worker skeleton com driver mock.
-4. Orquestração de pipeline: sequência, idempotência, retry, dead-letter.
-5. Observabilidade básica (logs estruturados + Prometheus/Grafana).
+1. ✅ **Contratos do domínio** — `Account`, `Job`, `Pipeline`, `Execution`,
+   `AutomationDriver`, `ContentSource`. Em `packages/domain`.
+2. ✅ Infra base: Postgres + Redis + API mínima de contas via Docker Compose.
+   `docker-compose.yml`, `packages/db` (schema versionado, `claim_next_job`,
+   `idempotency_key` UNIQUE, proxy dedicado UNIQUE), `apps/api` (Fastify).
+3. ✅ Fila + worker skeleton com driver mock. `packages/execution` (BullMQ,
+   producer, worker, repos), `packages/driver-mock`, `apps/worker`.
+4. ✅ Orquestração de pipeline: sequência, idempotência, retry, dead-letter.
+   `packages/orchestrator` (`pipeline_executions`/`pipeline_step_executions`,
+   `advance` transacional com `FOR UPDATE`, reusa `packages/execution`).
+5. **Observabilidade básica** (logs estruturados + Prometheus/Grafana).
+   _(próxima fase — logs pino já existem; falta métricas/dashboards)_
 6. Driver Graph API real, cobrindo operações do fluxo core.
 7. Validação em pequena escala antes de paralelizar.
 8. Driver Playwright pro que a API não cobre (Destaques etc.).
@@ -188,6 +194,11 @@ um incidente real de produção documentado no histórico do projeto anterior:
 10. Escala horizontal de workers.
 11. Painel admin.
 12. Backups e hardening antes de operar as 500 contas em produção real.
+
+> **Nota de ambiente:** a máquina de desenvolvimento atual **não tem Docker**;
+> a validação das Fases 02–04 usou Postgres/Redis portáteis (portas 55432/56379).
+> O `docker-compose.yml` é o fluxo oficial mas ainda não foi exercitado subindo
+> containers de fato.
 
 ---
 
