@@ -6,6 +6,7 @@
 
 import { Queue } from "bullmq";
 import type { DriverClass, DriverOperationKind, RetryPolicy } from "@scaleapp/domain";
+import { recordJobEnqueued } from "@scaleapp/observability";
 import type { Redis } from "./connection.js";
 import { queueName, type JobQueueData } from "./queue.js";
 
@@ -58,6 +59,7 @@ export class JobProducer {
         ...(input.delayMs !== undefined ? { delay: input.delayMs } : {}),
       },
     );
+    recordJobEnqueued(input.driverClass, input.operationKind);
   }
 
   async close(): Promise<void> {

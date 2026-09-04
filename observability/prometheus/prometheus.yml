@@ -1,0 +1,25 @@
+# Prometheus — scrape da API e do worker do ScaleApp.
+# Em dev, API e worker rodam no host (node), então usamos host.docker.internal.
+# Em produção (containers), troque os targets pelos nomes de serviço do compose.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: scaleapp-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:3000"]
+        labels:
+          component: api
+
+  - job_name: scaleapp-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:9101"]
+        labels:
+          component: worker

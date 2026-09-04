@@ -29,6 +29,7 @@ import type {
   MetaAppId,
   ProxyId,
 } from "@scaleapp/domain";
+import { recordJobProcessed, startJobTimer } from "@scaleapp/observability";
 import type { Pool } from "pg";
 import { computeBackoff } from "./backoff.js";
 import type { Redis } from "./connection.js";
@@ -76,10 +77,15 @@ export function createJobWorker(opts: CreateJobWorkerOptions): Worker<JobQueueDa
       attemptsMade: bullJob.attemptsMade,
     });
 
+    // Cronômetro da entrega; o desfecho e a operação são conhecidos adiante.
+    const endTimer = startJobTimer(driverClass);
+
     // 1. Claim atômico.
     const claimed = await jobRepo.claimById(dbJobId, workerId, leaseSeconds);
     if (!claimed) {
       const current = await jobRepo.getById(dbJobId);
+      endTimer({ operation_kind: current?.operationKind ?? "unknown", outcome: "skipped" });
+      recordJobProcessed(driverClass, "skipped");
       if (current?.status === "succeeded") {
         log.info("job já concluído anteriormente — skip idempotente");
         return current.result;
@@ -120,10 +126,14 @@ export function createJobWorker(opts: CreateJobWorkerOptions): Worker<JobQueueDa
     log.info({ kind: request.kind }, "executando driver");
     const result = await driver.execute(request);
 
+    const operationKind = claimed.operationKind;
+
     // 3. Sucesso.
     if (result.ok) {
       await jobRepo.markSucceeded(dbJobId, result.value);
       await executionRepo.recompute(claimed.executionId);
+      endTimer({ operation_kind: operationKind, outcome: "succeeded" });
+      recordJobProcessed(driverClass, "succeeded");
       log.info("job concluído com sucesso (succeeded)");
       return result.value;
     }
@@ -136,6 +146,8 @@ export function createJobWorker(opts: CreateJobWorkerOptions): Worker<JobQueueDa
     if (!error.retryable) {
       await jobRepo.markFailed(dbJobId, error);
       await executionRepo.recompute(claimed.executionId);
+      endTimer({ operation_kind: operationKind, outcome: "failed" });
+      recordJobProcessed(driverClass, "failed");
       log.error({ failureClass: error.failureClass, code: error.code }, "falha não-retryável (failed)");
       throw new UnrecoverableError(error.message);
     }
@@ -143,12 +155,16 @@ export function createJobWorker(opts: CreateJobWorkerOptions): Worker<JobQueueDa
     if (isLastAttempt) {
       await jobRepo.markDeadLetter(dbJobId, error);
       await executionRepo.recompute(claimed.executionId);
+      endTimer({ operation_kind: operationKind, outcome: "dead_letter" });
+      recordJobProcessed(driverClass, "dead_letter");
       log.error({ failureClass: error.failureClass, code: error.code }, "retries esgotados (dead_letter)");
       throw new Error(error.message);
     }
 
     await jobRepo.markRetrying(dbJobId, error);
     await executionRepo.recompute(claimed.executionId);
+    endTimer({ operation_kind: operationKind, outcome: "retrying" });
+    recordJobProcessed(driverClass, "retrying");
     log.warn(
       { failureClass: error.failureClass, code: error.code, nextAttempt: bullJob.attemptsMade + 2 },
       "falha retryável — reagendando (retrying)",

@@ -14,7 +14,9 @@
     "@scaleapp/db": "workspace:*",
     "@scaleapp/domain": "workspace:*",
     "@scaleapp/driver-mock": "workspace:*",
-    "@scaleapp/execution": "workspace:*"
+    "@scaleapp/execution": "workspace:*",
+    "@scaleapp/observability": "workspace:*",
+    "bullmq": "^5.34.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

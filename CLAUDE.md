@@ -185,9 +185,15 @@ um incidente real de produção documentado no histórico do projeto anterior:
 4. ✅ Orquestração de pipeline: sequência, idempotência, retry, dead-letter.
    `packages/orchestrator` (`pipeline_executions`/`pipeline_step_executions`,
    `advance` transacional com `FOR UPDATE`, reusa `packages/execution`).
-5. **Observabilidade básica** (logs estruturados + Prometheus/Grafana).
-   _(próxima fase — logs pino já existem; falta métricas/dashboards)_
-6. Driver Graph API real, cobrindo operações do fluxo core.
+5. ✅ **Observabilidade básica** (logs estruturados + Prometheus/Grafana/Loki).
+   `packages/observability` (registry prom-client, métricas de job/fila/HTTP,
+   servidor `/metrics`), API e worker instrumentados, `pino-loki` opt-in via
+   `LOKI_URL`. Stack Prometheus+Grafana+Loki+promtail no compose sob o profile
+   `observability` (`docker compose --profile observability up -d`); datasources
+   e dashboard "ScaleApp — Visão geral" provisionados. Grafana em
+   `localhost:3001` (admin/admin por padrão). API expõe `/metrics` na
+   `API_PORT`; worker na `WORKER_METRICS_PORT` (9101).
+6. **Driver Graph API real, cobrindo operações do fluxo core.** _(próxima fase)_
 7. Validação em pequena escala antes de paralelizar.
 8. Driver Playwright pro que a API não cobre (Destaques etc.).
 9. Content Acquisition Driver (contas dedicadas de scraping).
@@ -195,10 +201,13 @@ um incidente real de produção documentado no histórico do projeto anterior:
 11. Painel admin.
 12. Backups e hardening antes de operar as 500 contas em produção real.
 
-> **Nota de ambiente:** a máquina de desenvolvimento atual **não tem Docker**;
-> a validação das Fases 02–04 usou Postgres/Redis portáteis (portas 55432/56379).
-> O `docker-compose.yml` é o fluxo oficial mas ainda não foi exercitado subindo
-> containers de fato.
+> **Nota de ambiente:** a máquina de desenvolvimento agora tem **Docker Desktop**
+> (backend WSL2). O `docker-compose.yml` foi exercitado de verdade: Postgres
+> `16-alpine` + Redis `7-alpine` sobem nas portas padrão 5432/6379, as 3
+> migrations aplicam e `claim_next_job` existe. O `.env` real (gitignorado) mora
+> na raiz. Nota: o `docker` do Docker Desktop instala por usuário em
+> `%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin` — se um shell não achar
+> `docker`, recarregue o PATH do registro.
 
 ---
 

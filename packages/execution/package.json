@@ -19,9 +19,11 @@
   "dependencies": {
     "@scaleapp/db": "workspace:*",
     "@scaleapp/domain": "workspace:*",
+    "@scaleapp/observability": "workspace:*",
     "bullmq": "^5.34.0",
     "ioredis": "^5.4.1",
-    "pino": "^9.5.0"
+    "pino": "^9.5.0",
+    "pino-loki": "^2.5.0"
   },
   "devDependencies": {
     "@scaleapp/driver-mock": "workspace:*",
