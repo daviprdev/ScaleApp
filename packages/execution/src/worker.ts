@@ -27,6 +27,7 @@ import type {
   IdempotencyKey,
   JobId,
   MetaAppId,
+  OperationError,
   ProxyId,
 } from "@scaleapp/domain";
 import { recordJobProcessed, startJobTimer } from "@scaleapp/observability";
@@ -49,6 +50,21 @@ export interface CreateJobWorkerOptions {
   readonly leaseSeconds?: number;
   /** Prefixo das chaves Redis (isolamento de ambiente/teste). */
   readonly prefix?: string;
+  /**
+   * Observador de falha de operação. Existe para que módulos do Control Plane
+   * reajam à `FailureClass` (ex.: o Session Manager marcando checkpoint vs
+   * token morto — regra 3) sem que este pacote os importe. É best-effort: uma
+   * exceção aqui é logada e não altera o desfecho do job.
+   */
+  readonly onOperationFailure?: (info: OperationFailureInfo) => Promise<void> | void;
+}
+
+export interface OperationFailureInfo {
+  readonly accountId: string;
+  readonly jobId: string;
+  readonly driverClass: DriverClass;
+  readonly operationKind: DriverOperationKind;
+  readonly error: OperationError;
 }
 
 export function createJobWorker(opts: CreateJobWorkerOptions): Worker<JobQueueData> {
@@ -62,6 +78,7 @@ export function createJobWorker(opts: CreateJobWorkerOptions): Worker<JobQueueDa
     concurrency = 5,
     leaseSeconds = 60,
     prefix,
+    onOperationFailure,
   } = opts;
 
   const jobRepo = new JobRepository(pool);
@@ -141,6 +158,26 @@ export function createJobWorker(opts: CreateJobWorkerOptions): Worker<JobQueueDa
 
     // 4-6. Falha: classifica e decide retry / dead-letter / terminal.
     const error = result.error;
+
+    // Notifica os interessados na classificação antes de decidir o destino do
+    // job: quem remedia checkpoint/token morto precisa saber mesmo quando o
+    // job ainda vai retentar.
+    if (onOperationFailure) {
+      try {
+        await onOperationFailure({
+          accountId: contextRow.accountId,
+          jobId: dbJobId,
+          driverClass,
+          operationKind,
+          error,
+        });
+      } catch (hookErr) {
+        log.warn(
+          { err: hookErr instanceof Error ? hookErr.message : String(hookErr) },
+          "observador de falha lançou — ignorado",
+        );
+      }
+    }
     const maxAttempts = bullJob.opts.attempts ?? 1;
     const isLastAttempt = bullJob.attemptsMade + 1 >= maxAttempts;
 

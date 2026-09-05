@@ -17,6 +17,11 @@ export interface AppConfig {
   readonly databaseUrl: string;
   readonly host: string;
   readonly port: number;
+  /**
+   * URI de callback do OAuth, registrada no Meta App. Precisa bater byte a byte
+   * com a cadastrada lá: a Meta compara a string na troca do código.
+   */
+  readonly oauthRedirectUri: string;
 }
 
 export function loadConfig(): AppConfig {
@@ -24,9 +29,12 @@ export function loadConfig(): AppConfig {
   if (!databaseUrl) {
     throw new Error("DATABASE_URL não definida (copie .env.example para .env).");
   }
+  const port = Number(process.env.API_PORT ?? "3000");
   return {
     databaseUrl,
     host: process.env.API_HOST ?? "0.0.0.0",
-    port: Number(process.env.API_PORT ?? "3000"),
+    port,
+    oauthRedirectUri:
+      process.env.OAUTH_REDIRECT_URI ?? `http://localhost:${port}/auth/instagram/callback`,
   };
 }

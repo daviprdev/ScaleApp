@@ -8,9 +8,10 @@ import {
 } from "@scaleapp/observability";
 import type { Pool } from "pg";
 import { registerAccountRoutes } from "./routes/accounts.js";
+import { registerSessionRoutes, type SessionRoutesConfig } from "./routes/session.js";
 
 /** Monta a instância Fastify com as rotas, dado um pool já criado. */
-export function buildServer(pool: Pool): FastifyInstance {
+export function buildServer(pool: Pool, sessionConfig: SessionRoutesConfig): FastifyInstance {
   const app = Fastify({ logger: true });
 
   // Métricas de processo (heap, event loop, CPU) neste processo da API.
@@ -40,6 +41,7 @@ export function buildServer(pool: Pool): FastifyInstance {
   });
 
   registerAccountRoutes(app, pool);
+  registerSessionRoutes(app, pool, sessionConfig);
 
   return app;
 }

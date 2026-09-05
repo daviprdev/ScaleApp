@@ -20,7 +20,7 @@ import type {
 import { GraphApiDriver } from "../src/graphDriver.js";
 import type { HttpClient, HttpRequest, HttpResponse } from "../src/httpClient.js";
 import { HttpTransportError } from "../src/httpClient.js";
-import type { ProxyResolver } from "../src/ports.js";
+import type { ProxyResolver, TokenSink } from "../src/ports.js";
 import { EnvCredentialResolver, UrlMediaResolver } from "../src/devResolvers.js";
 
 // --- Fakes -------------------------------------------------------------------
@@ -80,12 +80,27 @@ function req<K extends Kind>(
   };
 }
 
-function makeDriver(http: HttpClient, media = new UrlMediaResolver()): GraphApiDriver {
+/** Sink de teste: guarda o que o refresh mandaria persistir no cofre. */
+class RecordingTokenSink implements TokenSink {
+  readonly rotations: Array<{ ref: string; token: string; expiresAt: string }> = [];
+  constructor(private readonly fail?: Error) {}
+  async rotateToken(ref: string, token: string, expiresAt: string): Promise<void> {
+    if (this.fail) throw this.fail;
+    this.rotations.push({ ref, token, expiresAt });
+  }
+}
+
+function makeDriver(
+  http: HttpClient,
+  media = new UrlMediaResolver(),
+  tokenSink?: TokenSink,
+): GraphApiDriver {
   return new GraphApiDriver({
     http,
     credentials: new EnvCredentialResolver(),
     proxies: proxyOk,
     media,
+    ...(tokenSink ? { tokenSink } : {}),
     sleep: async () => {},
   });
 }
@@ -181,12 +196,39 @@ test("fetch_insights: agrega like_count + reach/plays", async () => {
   if (res.ok) assert.deepEqual(res.value.insights, { likes: 42, reach: 100, plays: 55 });
 });
 
-test("refresh_session: calcula expiresAt a partir de expires_in", async () => {
-  const http = new FakeHttp(() => json(200, { access_token: "new", expires_in: 5184000 }));
-  const driver = makeDriver(http);
+test("refresh_session: persiste o token novo e calcula expiresAt", async () => {
+  const http = new FakeHttp(() => json(200, { access_token: "new-token", expires_in: 5184000 }));
+  const sink = new RecordingTokenSink();
+  const driver = makeDriver(http, new UrlMediaResolver(), sink);
   const res = await driver.execute(req(DriverOperationKind.RefreshSession, { force: true }));
   assert.equal(res.ok, true);
   if (res.ok) assert.ok(Date.parse(res.value.expiresAt) > Date.now());
+  // O token renovado tem que ir para o cofre; sem isso o refresh seria no-op.
+  assert.equal(sink.rotations.length, 1);
+  assert.deepEqual(
+    { ref: sink.rotations[0]!.ref, token: sink.rotations[0]!.token },
+    { ref: "tok-abc", token: "new-token" },
+  );
+});
+
+test("refresh_session sem tokenSink falha em vez de fingir sucesso", async () => {
+  const http = new FakeHttp(() => json(200, { access_token: "new-token", expires_in: 5184000 }));
+  const driver = makeDriver(http);
+  const res = await driver.execute(req(DriverOperationKind.RefreshSession, { force: true }));
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.error.code, "NO_TOKEN_SINK");
+});
+
+test("refresh_session: falha de persistência não vira sucesso (retryável)", async () => {
+  const http = new FakeHttp(() => json(200, { access_token: "new-token", expires_in: 5184000 }));
+  const sink = new RecordingTokenSink(new Error("cofre indisponível"));
+  const driver = makeDriver(http, new UrlMediaResolver(), sink);
+  const res = await driver.execute(req(DriverOperationKind.RefreshSession, { force: true }));
+  assert.equal(res.ok, false);
+  if (!res.ok) {
+    assert.equal(res.error.code, "TOKEN_PERSIST_FAILED");
+    assert.equal(res.error.retryable, true);
+  }
 });
 
 // --- Mapeamento de erro (regras 2 e 3) --------------------------------------

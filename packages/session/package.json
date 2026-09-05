@@ -1,5 +1,5 @@
 {
-  "name": "@scaleapp/orchestrator",
+  "name": "@scaleapp/session",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,19 +14,16 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
-    "test": "node --import tsx --env-file-if-exists=../../.env --test --test-concurrency=1 test/*.test.ts"
+    "test": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
-    "@scaleapp/db": "workspace:*",
     "@scaleapp/domain": "workspace:*",
-    "@scaleapp/execution": "workspace:*"
+    "@scaleapp/execution": "workspace:*",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
-    "@scaleapp/driver-mock": "workspace:*",
     "@types/node": "^22.10.0",
     "@types/pg": "^8.11.10",
-    "bullmq": "^5.34.0",
-    "pg": "^8.13.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

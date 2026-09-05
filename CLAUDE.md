@@ -104,6 +104,29 @@ importa Playwright, Appium ou SDK do Instagram diretamente.
 - **Warmup de conta nova** entra implementado de verdade desde o início
   (no AutoScale foi projetado mas nunca funcionou de fato — bug de anos
   nunca detectado).
+- **Cofre próprio no Postgres, não serviço externo** (módulo 8). Segredo
+  (token, senha, secret de Meta App, credencial de proxy) é cifrado na
+  aplicação com AES-256-GCM e guardado na tabela `secrets`; o resto do sistema
+  só manuseia a referência `vault://<uuid>`. A chave vive no ambiente
+  (`SECRETS_KEYS`), nunca no banco — um dump sozinho não expõe nada. Keyring
+  versionado (`key_id` por linha) para rotacionar chave em lotes limitados sem
+  reescrever tudo de uma vez. AAD = `id:kind`, então um blob copiado para
+  outra linha ou outro tipo de segredo deixa de decifrar.
+- **A referência do token é estável através do refresh.** Refrescar reescreve
+  a mesma linha do cofre em vez de criar outra: `accounts.access_token_ref`
+  não muda, e a gravação do token novo + a nova expiração acontecem na mesma
+  transação. Separadas, uma falha no meio deixaria a conta com token velho e
+  expiração nova — e ela pararia de ser candidata a refresh, morrendo em
+  silêncio.
+- **Refresh que não persiste é falha, não sucesso.** O driver Graph exige um
+  `tokenSink`; sem ele, `refresh_session` retorna erro em vez de rodar como
+  no-op. É a mesma classe de bug do warmup que "existia" e nunca funcionou.
+- **Login OAuth sai pelo proxy dedicado da conta**, como qualquer outra
+  requisição em nome dela (regras 7 e 10). Fazer o login pelo IP da VPS e só
+  depois operar por proxy é justamente o padrão que a Meta correlaciona.
+- **`state` do OAuth assinado, não persistido.** HMAC derivado da chave ativa
+  do cofre + validade curta, em vez de tabela de fluxos em aberto: sem estado
+  no banco não há linha órfã de fluxo abandonado.
 
 ### Escopo funcional confirmado (v1)
 
@@ -207,21 +230,53 @@ um incidente real de produção documentado no histórico do projeto anterior:
    driver real com `WORKER_GRAPH_DRIVER=1` (mock continua o default). Validado
    com HttpClient fake (13 testes); **ainda não posta de verdade** — falta
    credenciais Meta + módulos 8/9 + biblioteca de mídia (ver passo 7).
-7. **Validação em pequena escala antes de paralelizar.** _(próxima fase — exige
+7. **Validação em pequena escala antes de paralelizar.** _(fase atual — exige
    credenciais Meta reais; é aqui que o driver Graph faz a primeira postagem)_
+
+   ✅ **Módulo 8 — Session/Credential Manager** já implementado, e com ele o
+   driver Graph deixou de depender de stub para credencial.
+   `packages/session`: cofre (`PostgresSecretVault` + `Keyring` AES-256-GCM,
+   migration `0005`), `VaultCredentialResolver`/`VaultTokenSink` implementando
+   as portas do driver, `SessionRepository` com as transições de sessão
+   (checkpoint ≠ token morto, regra 3), refresh preventivo
+   (`planPreventiveRefresh` + varredura `SESSION_SWEEP_ENABLED`, com lote
+   limitado, stagger dentro do ciclo e chave de idempotência derivada da
+   expiração vigente) e `AccountLoginService` (OAuth). A troca OAuth em si
+   vive em `driver-graph/oauth.ts` — é conhecimento da plataforma — e entra
+   no Control Plane pela porta `OAuthTokenExchange`. API ganhou
+   `POST /accounts/:id/session/authorize-url`,
+   `GET /auth/instagram/callback`, `GET /accounts/:id/session` e
+   `PUT /meta-apps/:id/secret` (carga do secret do App no cofre). Validado com
+   fakes (34 testes) e com um smoke contra Postgres/Redis reais — cofre,
+   varredura de refresh, rotação de token pelo sink e transições de sessão;
+   **ainda não exercitado contra a Meta real.**
+
+   Falta para a validação de fato: credenciais Meta (App + conta
+   Business/Creator), **módulo 9 (Proxy/Network Manager)** — hoje ainda no
+   `DbAccountProxyResolver` de dev — e a biblioteca de mídia (porta `Media`).
 8. Driver Playwright pro que a API não cobre (Destaques etc.).
 9. Content Acquisition Driver (contas dedicadas de scraping).
 10. Escala horizontal de workers.
 11. Painel admin.
 12. Backups e hardening antes de operar as 500 contas em produção real.
 
-> **Nota de ambiente:** a máquina de desenvolvimento agora tem **Docker Desktop**
+> **Nota de ambiente:** a máquina de desenvolvimento tem **Docker Desktop**
 > (backend WSL2). O `docker-compose.yml` foi exercitado de verdade: Postgres
-> `16-alpine` + Redis `7-alpine` sobem nas portas padrão 5432/6379, as 3
-> migrations aplicam e `claim_next_job` existe. O `.env` real (gitignorado) mora
-> na raiz. Nota: o `docker` do Docker Desktop instala por usuário em
-> `%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin` — se um shell não achar
-> `docker`, recarregue o PATH do registro.
+> `16-alpine` + Redis `7-alpine` sobem, as 5 migrations aplicam e o módulo 8 foi
+> validado contra esse banco. O `.env` real (gitignorado) mora na raiz.
+>
+> Duas pegadinhas desta máquina, ambas já custaram tempo:
+> - o `docker` do Docker Desktop instala por usuário em
+>   `%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin` — se um shell não achar
+>   `docker`, recarregue o PATH do registro;
+> - existe um **PostgreSQL nativo do Windows** (serviço `postgresql-x64-16`)
+>   escutando na 5432. Como o Docker também publica na 5432, a conexão ia parar
+>   no Postgres errado e falhava com `28P01 senha falhou`. Por isso o `.env`
+>   local usa `POSTGRES_PORT=5433` e `DATABASE_URL` na 5433 — o serviço nativo
+>   não foi mexido.
+>
+> Os testes de integração (`execution`, `orchestrator`) leem `DATABASE_URL`/
+> `REDIS_URL` do `.env` da raiz via `--env-file-if-exists` no script de `test`.
 
 ---
 

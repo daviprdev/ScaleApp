@@ -20,4 +20,4 @@ export type { EnqueueInput, JobProducerOptions } from "./producer.js";
 export { createAndEnqueueJob } from "./jobService.js";
 export type { CreateAndEnqueueResult } from "./jobService.js";
 export { createJobWorker } from "./worker.js";
-export type { CreateJobWorkerOptions } from "./worker.js";
+export type { CreateJobWorkerOptions, OperationFailureInfo } from "./worker.js";

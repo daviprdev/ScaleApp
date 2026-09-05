@@ -13,6 +13,7 @@ export { UndiciHttpClient, HttpTransportError } from "./httpClient.js";
 export type { HttpClient, HttpRequest, HttpResponse } from "./httpClient.js";
 export type {
   CredentialResolver,
+  TokenSink,
   ProxyResolver,
   ProxyConnection,
   MediaResolver,
@@ -28,6 +29,8 @@ export {
   containerError,
 } from "./errors.js";
 export type { GraphErrorBody } from "./errors.js";
+export { InstagramOAuthClient, OAuthExchangeError, DEFAULT_OAUTH_CONFIG } from "./oauth.js";
+export type { InstagramOAuthConfig } from "./oauth.js";
 export {
   DbAccountProxyResolver,
   EnvCredentialResolver,

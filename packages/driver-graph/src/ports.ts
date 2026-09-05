@@ -15,6 +15,17 @@ export interface CredentialResolver {
   resolveToken(accessTokenRef: string): Promise<string | null>;
 }
 
+/**
+ * Recebe o token que o refresh devolveu. Existe porque `refresh_access_token`
+ * responde com um token NOVO: sem alguém para persistir, o refresh seria um
+ * no-op silencioso — o job terminaria "com sucesso" e a conta seguiria com o
+ * token velho até expirar. O sink guarda o segredo direto no cofre, então o
+ * token nunca aparece no resultado do job (que é persistido em JSONB).
+ */
+export interface TokenSink {
+  rotateToken(accessTokenRef: string, accessToken: string, expiresAt: string): Promise<void>;
+}
+
 export interface ProxyConnection {
   /** URL completa do proxy, com credenciais embutidas quando houver. */
   readonly url: string;

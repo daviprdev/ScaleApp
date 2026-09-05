@@ -19,6 +19,7 @@ import {
   CapabilitySupport,
   DriverClass,
   DriverOperationKind,
+  FailureClass,
 } from "@scaleapp/domain";
 import type {
   AutomationDriver,
@@ -45,13 +46,19 @@ import {
   tokenUnresolved,
 } from "./errors.js";
 import { HttpTransportError, type HttpClient } from "./httpClient.js";
-import type { CredentialResolver, MediaResolver, ProxyResolver } from "./ports.js";
+import type { CredentialResolver, MediaResolver, ProxyResolver, TokenSink } from "./ports.js";
 
 export interface GraphApiDriverDeps {
   readonly http: HttpClient;
   readonly credentials: CredentialResolver;
   readonly proxies: ProxyResolver;
   readonly media: MediaResolver;
+  /**
+   * Destino do token rotacionado pelo refresh. Opcional só para os testes que
+   * não exercitam refresh: sem ele, `refresh_session` FALHA em vez de fingir
+   * sucesso — um refresh que não persiste é pior que um refresh que não roda.
+   */
+  readonly tokenSink?: TokenSink;
   readonly config?: Partial<GraphApiConfig>;
   /** Injetável para os testes não esperarem de verdade no polling. */
   readonly sleep?: (ms: number) => Promise<void>;
@@ -420,13 +427,51 @@ export class GraphApiDriver implements AutomationDriver {
     if (!netR.ok) return netR;
     const net = netR.value;
 
+    if (!this.deps.tokenSink) {
+      return {
+        ok: false,
+        error: preconditionError(
+          "NO_TOKEN_SINK",
+          "driver sem tokenSink: o token renovado não teria onde ser persistido",
+        ),
+      };
+    }
+
     // Instagram Login: troca o long-lived token por um novo (mesma validade base).
     const res = await this.call(net, "GET", "refresh_access_token", {
       grant_type: "ig_refresh_token",
     });
     if (!res.ok) return res;
+
+    const newToken = String(res.json.access_token ?? "");
     const expiresInSec = Number(res.json.expires_in ?? 0);
-    return { ok: true, value: { expiresAt: iso(Date.now() + expiresInSec * 1000) } };
+    if (!newToken || expiresInSec <= 0) {
+      return {
+        ok: false,
+        error: preconditionError("NO_REFRESHED_TOKEN", "refresh sem access_token/expires_in"),
+      };
+    }
+    const expiresAt = iso(Date.now() + expiresInSec * 1000);
+
+    // Persistir ANTES de reportar sucesso: se a gravação falha, o job falha e
+    // retenta. Reportar sucesso com o cofre desatualizado deixaria a conta com
+    // token velho e expiração nova — ela pararia de ser candidata a refresh.
+    try {
+      await this.deps.tokenSink.rotateToken(ctx.accessTokenRef, newToken, expiresAt);
+    } catch (e) {
+      return {
+        ok: false,
+        error: {
+          failureClass: FailureClass.Unknown,
+          code: "TOKEN_PERSIST_FAILED",
+          message: `token renovado mas não persistido: ${e instanceof Error ? e.message : String(e)}`,
+          retryable: true,
+          occurredAt: iso(Date.now()),
+        },
+      };
+    }
+
+    return { ok: true, value: { expiresAt } };
   }
 
   // --- Warmup ------------------------------------------------------------------

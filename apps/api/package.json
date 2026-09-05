@@ -13,7 +13,9 @@
   "dependencies": {
     "@scaleapp/db": "workspace:*",
     "@scaleapp/domain": "workspace:*",
+    "@scaleapp/driver-graph": "workspace:*",
     "@scaleapp/observability": "workspace:*",
+    "@scaleapp/session": "workspace:*",
     "fastify": "^5.1.0",
     "pg": "^8.13.1"
   },

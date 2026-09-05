@@ -20,9 +20,15 @@ importers:
       '@scaleapp/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@scaleapp/driver-graph':
+        specifier: workspace:*
+        version: link:../../packages/driver-graph
       '@scaleapp/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@scaleapp/session':
+        specifier: workspace:*
+        version: link:../../packages/session
       fastify:
         specifier: ^5.1.0
         version: 5.12.3
@@ -63,6 +69,9 @@ importers:
       '@scaleapp/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@scaleapp/session':
+        specifier: workspace:*
+        version: link:../../packages/session
       bullmq:
         specifier: ^5.34.0
         version: 5.81.4
@@ -223,6 +232,31 @@ importers:
       pg:
         specifier: ^8.13.1
         version: 8.23.0
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.13
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/session:
+    dependencies:
+      '@scaleapp/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@scaleapp/execution':
+        specifier: workspace:*
+        version: link:../execution
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
       tsx:
         specifier: ^4.19.2
         version: 4.23.13

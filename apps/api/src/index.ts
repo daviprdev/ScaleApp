@@ -10,7 +10,7 @@ import { buildServer } from "./server.js";
 async function main(): Promise<void> {
   const config = loadConfig();
   const pool = createPool(config.databaseUrl);
-  const app = buildServer(pool);
+  const app = buildServer(pool, { redirectUri: config.oauthRedirectUri });
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info(`recebido ${signal}, encerrando...`);
