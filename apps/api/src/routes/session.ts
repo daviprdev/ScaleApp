@@ -12,7 +12,8 @@
 
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
-import { InstagramOAuthClient, UndiciHttpClient, DbAccountProxyResolver } from "@scaleapp/driver-graph";
+import { InstagramOAuthClient, UndiciHttpClient } from "@scaleapp/driver-graph";
+import { PoolProxyResolver } from "@scaleapp/proxy";
 import {
   AccountLoginService,
   Keyring,
@@ -50,8 +51,8 @@ export function registerSessionRoutes(
           vault,
           keyring,
           exchange: new InstagramOAuthClient(new UndiciHttpClient()),
-          // Módulo 9 substitui este resolver pelo pool de proxies real.
-          proxies: new DbAccountProxyResolver(pool),
+          // Pool real (módulo 9): sem proxy dedicado vivo, o login não sai.
+          proxies: new PoolProxyResolver(pool, vault, { cacheTtlMs: 0 }),
           redirectUri: config.redirectUri,
         })
       : null;

@@ -15,7 +15,6 @@ import { createPool } from "@scaleapp/db";
 import { DriverClass } from "@scaleapp/domain";
 import { InMemoryDriverRegistry, MockDriver } from "@scaleapp/driver-mock";
 import {
-  DbAccountProxyResolver,
   EnvCredentialResolver,
   GraphApiDriver,
   UndiciHttpClient,
@@ -23,6 +22,15 @@ import {
   type CredentialResolver,
   type TokenSink,
 } from "@scaleapp/driver-graph";
+import {
+  PoolProxyResolver,
+  ProxyAssignmentService,
+  ProxyRepository,
+  createProxyFailureHandler,
+  loadProxyConfig,
+  startProxyHealthSweep,
+  type SecretReader,
+} from "@scaleapp/proxy";
 import {
   JobProducer,
   createJobWorker,
@@ -52,6 +60,7 @@ import { loadWorkerConfig } from "./config.js";
 async function main(): Promise<void> {
   const config = loadWorkerConfig();
   const sessionConfig = loadSessionConfig();
+  const proxyConfig = loadProxyConfig();
   const logger = createLogger("worker");
   const pool = createPool(config.databaseUrl);
   const sessions = new SessionRepository(pool);
@@ -61,6 +70,7 @@ async function main(): Promise<void> {
   const keyring = Keyring.fromEnv();
   let credentials: CredentialResolver;
   let tokenSink: TokenSink | undefined;
+  let secrets: SecretReader;
   if (keyring) {
     const vault = new PostgresSecretVault(pool, keyring);
     const vaultCredentials = new VaultCredentialResolver(vault, {
@@ -68,11 +78,22 @@ async function main(): Promise<void> {
     });
     credentials = vaultCredentials;
     tokenSink = new VaultTokenSink(pool, vault, sessions, vaultCredentials);
+    secrets = vault;
     logger.info({ activeKeyId: keyring.activeKeyId }, "cofre de segredos ativo");
   } else {
     credentials = new EnvCredentialResolver();
+    // Dev sem cofre: trata `credentials_ref` literal (`user:pass`) como a
+    // própria credencial, como faziam os stubs. Nunca em produção.
+    secrets = { async get(ref: string) { return ref.startsWith("vault://") ? null : ref; } };
     logger.warn("SECRETS_KEYS ausente — usando resolvers de dev, sem cofre nem refresh");
   }
+
+  // Pool de proxies (módulo 9): resolver real no lugar do stub de dev.
+  const proxyRepo = new ProxyRepository(pool);
+  const proxyResolver = new PoolProxyResolver(pool, secrets, {
+    cacheTtlMs: proxyConfig.resolverCacheTtlMs,
+  });
+  const proxyAssignments = new ProxyAssignmentService(pool);
 
   // Registry: um driver por classe. Para graph_api, usa o driver Graph API real
   // quando WORKER_GRAPH_DRIVER=1; senão, o mock. As demais classes seguem no
@@ -84,7 +105,7 @@ async function main(): Promise<void> {
         new GraphApiDriver({
           http: new UndiciHttpClient(),
           credentials,
-          proxies: new DbAccountProxyResolver(pool),
+          proxies: proxyResolver,
           media: new UrlMediaResolver(),
           ...(tokenSink ? { tokenSink } : {}),
         }),
@@ -96,11 +117,23 @@ async function main(): Promise<void> {
   }
 
   // Regra 3: checkpoint e token morto viram estados distintos da conta assim que
-  // o driver classifica a falha, mesmo que o job ainda vá retentar.
-  const onOperationFailure = createSessionFailureHandler({
+  // o driver classifica a falha, mesmo que o job ainda vá retentar. O pool de
+  // proxies escuta a mesma falha para contabilizar `ProxyError` no proxy certo.
+  const onSessionFailure = createSessionFailureHandler({
     sessions,
     onRemediation: (r) => logger.warn(r, "remediação de sessão aplicada"),
   });
+  const onProxyFailure = createProxyFailureHandler({
+    repo: proxyRepo,
+    pool,
+    swapAfterFailures: proxyConfig.swapAfterFailures,
+    assignments: proxyAssignments,
+    onProxyFailure: (r) => logger.warn(r, "falha de proxy registrada"),
+  });
+  const onOperationFailure = async (info: Parameters<typeof onSessionFailure>[0]): Promise<void> => {
+    await onSessionFailure(info);
+    await onProxyFailure(info);
+  };
 
   const connections: Redis[] = [];
   const workers = config.driverClasses.map((driverClass) => {
@@ -153,6 +186,37 @@ async function main(): Promise<void> {
     }
   }
 
+  // Health check do pool de proxies. Mesma disciplina da varredura de sessão:
+  // opt-in, e ligada em um worker só (sondar o mesmo proxy de N processos não
+  // melhora o diagnóstico e multiplica tráfego pelo IP dele).
+  let proxySweep: { stop: () => void } | undefined;
+  if (proxyConfig.sweepEnabled) {
+    proxySweep = startProxyHealthSweep({
+      pool,
+      resolver: proxyResolver,
+      probe: new UndiciHttpClient(),
+      config: proxyConfig,
+      onSweep: (r) => {
+        if (r.suspectedOutage) {
+          logger.error(r, "varredura de proxy suspeita de OUTAGE — nenhum proxy condenado");
+        } else if (r.lowPool) {
+          logger.warn(r, "pool de proxies perto de acabar");
+        } else {
+          logger.info(r, "varredura de saúde do pool de proxies");
+        }
+      },
+      onError: (err) =>
+        logger.error(
+          { err: err instanceof Error ? err.message : String(err) },
+          "varredura de proxy falhou",
+        ),
+    });
+    logger.info(
+      { intervalMs: proxyConfig.sweepIntervalMs, limit: proxyConfig.sweepLimit },
+      "varredura de saúde de proxy ativa",
+    );
+  }
+
   // Observabilidade: métricas de processo + profundidade de fila por classe.
   initDefaultMetrics();
   const metricsConnection = createRedis(config.redisUrl);
@@ -179,6 +243,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, "encerrando workers...");
     sweep?.stop();
+    proxySweep?.stop();
     metricsServer.close();
     await sweepProducer?.close();
     await Promise.all([...queues.values()].map((q) => q.close()));

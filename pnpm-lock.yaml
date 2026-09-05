@@ -26,6 +26,9 @@ importers:
       '@scaleapp/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@scaleapp/proxy':
+        specifier: workspace:*
+        version: link:../../packages/proxy
       '@scaleapp/session':
         specifier: workspace:*
         version: link:../../packages/session
@@ -69,6 +72,9 @@ importers:
       '@scaleapp/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@scaleapp/proxy':
+        specifier: workspace:*
+        version: link:../../packages/proxy
       '@scaleapp/session':
         specifier: workspace:*
         version: link:../../packages/session
@@ -232,6 +238,28 @@ importers:
       pg:
         specifier: ^8.13.1
         version: 8.23.0
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.13
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/proxy:
+    dependencies:
+      '@scaleapp/domain':
+        specifier: workspace:*
+        version: link:../domain
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
       tsx:
         specifier: ^4.19.2
         version: 4.23.13

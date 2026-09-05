@@ -17,6 +17,7 @@
     "@scaleapp/driver-mock": "workspace:*",
     "@scaleapp/execution": "workspace:*",
     "@scaleapp/observability": "workspace:*",
+    "@scaleapp/proxy": "workspace:*",
     "@scaleapp/session": "workspace:*",
     "bullmq": "^5.34.0"
   },

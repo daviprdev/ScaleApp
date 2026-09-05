@@ -124,6 +124,25 @@ importa Playwright, Appium ou SDK do Instagram diretamente.
 - **Login OAuth sai pelo proxy dedicado da conta**, como qualquer outra
   requisição em nome dela (regras 7 e 10). Fazer o login pelo IP da VPS e só
   depois operar por proxy é justamente o padrão que a Meta correlaciona.
+- **Proxy morto e outage do provedor são diagnósticos diferentes** (módulo 9,
+  regra 2 aplicada ao pool). A varredura de saúde só declara um proxy `down`
+  quando o lote NÃO parece outage; a suspeita de outage exige limiar
+  percentual **e** contagem mínima absoluta, porque cada metade sozinha erra:
+  só percentual condena o pool inteiro num lote de três, só contagem ignora um
+  provedor pequeno caindo. Sob suspeita, todos ficam `degraded` e ninguém é
+  aposentado.
+- **Trocar o IP de uma conta é decisão cara, não automática.** Falha de proxy
+  em job real conta strike e degrada, mas a troca automática (`swapAfterFailures`)
+  vem desligada por padrão: conta pulando de IP sozinha é exatamente o padrão
+  que a plataforma nota. Quando ligada, o proxy ruim é aposentado, nunca
+  devolvido ao pool.
+- **O resolver recusa em vez de improvisar.** Proxy `down`/`retired`, ou
+  credencial que não está no cofre, resolve para nada — o driver transforma
+  isso em `ProxyError` e o job retenta. Não existe caminho "só desta vez pelo
+  IP da infra" (regra 10 não tem exceção).
+- **IP de saída é observado e comparado.** A checagem grava o IP que o proxy
+  apresenta; dois proxies "dedicados" com o mesmo IP são pool rotativo ou
+  compartilhado disfarçado, e aparecem num diagnóstico próprio.
 - **`state` do OAuth assinado, não persistido.** HMAC derivado da chave ativa
   do cofre + validade curta, em vez de tabela de fluxos em aberto: sem estado
   no banco não há linha órfã de fluxo abandonado.
@@ -251,9 +270,23 @@ um incidente real de produção documentado no histórico do projeto anterior:
    varredura de refresh, rotação de token pelo sink e transições de sessão;
    **ainda não exercitado contra a Meta real.**
 
+   ✅ **Módulo 9 — Proxy/Network Manager** também implementado.
+   `packages/proxy` (migration `0006`): `ProxyRepository` (claim atômico com
+   `FOR UPDATE SKIP LOCKED`, listagens limitadas), `ProxyAssignmentService`
+   (troca de proxy da conta numa transação, reserva para conta nova,
+   reconciliação dos dois lados do vínculo), `PoolProxyResolver` — o resolver
+   real que substituiu o `DbAccountProxyResolver` de dev no worker e na API —,
+   health check com a distinção proxy morto × outage do provedor, e o
+   diagnóstico de IP de saída compartilhado. Varredura opt-in via
+   `PROXY_SWEEP_ENABLED`. Rotas: CRUD de pool, `/proxies/:id/check`,
+   `/proxies/stats`, `/proxies/reserve`, `/accounts/:id/proxy/swap` e
+   `/proxies/diagnostics/shared-exit-ips`. Validado com 32 testes de fake e um
+   smoke contra Postgres real (claim concorrente, troca transacional, pool
+   esgotado, health check e diagnóstico de IP).
+
    Falta para a validação de fato: credenciais Meta (App + conta
-   Business/Creator), **módulo 9 (Proxy/Network Manager)** — hoje ainda no
-   `DbAccountProxyResolver` de dev — e a biblioteca de mídia (porta `Media`).
+   Business/Creator), proxies reais cadastrados no pool e a biblioteca de mídia
+   (porta `Media`) — hoje ainda no `UrlMediaResolver` de dev.
 8. Driver Playwright pro que a API não cobre (Destaques etc.).
 9. Content Acquisition Driver (contas dedicadas de scraping).
 10. Escala horizontal de workers.
