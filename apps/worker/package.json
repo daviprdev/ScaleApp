@@ -7,6 +7,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test test/*.test.ts",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js"
   },
@@ -16,6 +17,7 @@
     "@scaleapp/driver-graph": "workspace:*",
     "@scaleapp/driver-mock": "workspace:*",
     "@scaleapp/execution": "workspace:*",
+    "@scaleapp/media": "workspace:*",
     "@scaleapp/observability": "workspace:*",
     "@scaleapp/proxy": "workspace:*",
     "@scaleapp/session": "workspace:*",

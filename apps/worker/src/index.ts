@@ -18,10 +18,15 @@ import {
   EnvCredentialResolver,
   GraphApiDriver,
   UndiciHttpClient,
-  UrlMediaResolver,
   type CredentialResolver,
+  type MediaResolver,
   type TokenSink,
 } from "@scaleapp/driver-graph";
+import {
+  LibraryMediaResolver,
+  MediaRepository,
+  loadMediaConfig,
+} from "@scaleapp/media";
 import {
   PoolProxyResolver,
   ProxyAssignmentService,
@@ -61,6 +66,7 @@ async function main(): Promise<void> {
   const config = loadWorkerConfig();
   const sessionConfig = loadSessionConfig();
   const proxyConfig = loadProxyConfig();
+  const mediaConfig = loadMediaConfig();
   const logger = createLogger("worker");
   const pool = createPool(config.databaseUrl);
   const sessions = new SessionRepository(pool);
@@ -88,6 +94,26 @@ async function main(): Promise<void> {
     logger.warn("SECRETS_KEYS ausente — usando resolvers de dev, sem cofre nem refresh");
   }
 
+  // Biblioteca de mídia: o driver recebe uma URL assinada e temporária servida
+  // pela nossa API — a Graph API baixa o arquivo por conta própria. Sem cofre
+  // não há como assinar, e aí a mídia não resolve (job falha explicitamente)
+  // em vez de cair num stub que aceitaria qualquer string como URL.
+  let media: MediaResolver;
+  if (keyring) {
+    media = new LibraryMediaResolver(
+      new MediaRepository(pool),
+      { sign: (data) => keyring.hmac("media-url", data).toString("base64url") },
+      { publicBaseUrl: mediaConfig.publicBaseUrl, urlTtlMs: mediaConfig.urlTtlMs },
+    );
+  } else {
+    media = {
+      async resolveMedia() {
+        logger.error("sem SECRETS_KEYS não há URL assinada — mídia não resolve");
+        return null;
+      },
+    };
+  }
+
   // Pool de proxies (módulo 9): resolver real no lugar do stub de dev.
   const proxyRepo = new ProxyRepository(pool);
   const proxyResolver = new PoolProxyResolver(pool, secrets, {
@@ -106,7 +132,7 @@ async function main(): Promise<void> {
           http: new UndiciHttpClient(),
           credentials,
           proxies: proxyResolver,
-          media: new UrlMediaResolver(),
+          media,
           ...(tokenSink ? { tokenSink } : {}),
         }),
       );

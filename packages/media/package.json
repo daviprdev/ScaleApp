@@ -1,24 +1,23 @@
 {
-  "name": "@scaleapp/api",
+  "name": "@scaleapp/media",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
-    "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js"
+    "test": "node --import tsx --env-file-if-exists=../../.env --test --test-concurrency=1 test/*.test.ts"
   },
   "dependencies": {
-    "@scaleapp/db": "workspace:*",
     "@scaleapp/domain": "workspace:*",
-    "@scaleapp/driver-graph": "workspace:*",
-    "@scaleapp/media": "workspace:*",
-    "@scaleapp/observability": "workspace:*",
-    "@scaleapp/proxy": "workspace:*",
-    "@scaleapp/session": "workspace:*",
-    "fastify": "^5.1.0",
     "pg": "^8.13.1"
   },
   "devDependencies": {

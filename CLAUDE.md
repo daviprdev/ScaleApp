@@ -143,6 +143,31 @@ importa Playwright, Appium ou SDK do Instagram diretamente.
 - **IP de saída é observado e comparado.** A checagem grava o IP que o proxy
   apresenta; dois proxies "dedicados" com o mesmo IP são pool rotativo ou
   compartilhado disfarçado, e aparecem num diagnóstico próprio.
+- **Biblioteca de mídia: metadados no Postgres, bytes no storage.** Nada de
+  `bytea`/large object — um banco com vídeos dentro é impossível de fazer
+  backup e todo `SELECT` vira risco de memória. O backend do v1 é
+  **filesystem em volume da VPS**, atrás da porta `MediaStorage`: uma VPS só,
+  volume local, e o que S3/MinIO trariam de verdade (URL assinada) já é
+  resolvido pela própria API. Trocar para S3/MinIO depois é escrever outra
+  implementação da porta — sem migration, sem tocar em serviço ou resolver.
+- **Conteúdo endereçado por checksum.** A chave de storage é derivada do
+  sha256, então bytes idênticos ocupam uma cópia só e gravar duas vezes é
+  gravar o mesmo arquivo. A deduplicação é consequência do modelo, não uma
+  verificação que alguém pode esquecer de chamar. Duas tabelas: `media_blobs`
+  (o conteúdo) e `media_assets` (o item lógico) — o mesmo vídeo em duas pastas
+  são dois itens e um arquivo. É isso que faz "story/reel" ser classificação de
+  uso, não cópia.
+- **Ordem entre banco e storage é decisão, não detalhe.** Na ingestão, bytes
+  primeiro: uma falha no meio deixa um objeto órfão (invisível e recolhível),
+  enquanto a ordem inversa deixaria uma linha apontando para bytes inexistentes
+  — mídia que o pipeline promete publicar e não consegue. Na remoção, banco
+  primeiro: a referência some na hora e os bytes viram pendência
+  (`pending_delete`) que o coletor termina. Falha parcial vira trabalho
+  rastreável, nunca lixo silencioso.
+- **A URL da mídia é assinada e expira.** A Graph API baixa o arquivo sozinha,
+  então a biblioteca precisa ser alcançável da internet; uma URL adivinhável
+  por id exporia o acervo inteiro. HMAC derivado da chave ativa do cofre, com
+  validade que cobre o download do lado da Meta.
 - **`state` do OAuth assinado, não persistido.** HMAC derivado da chave ativa
   do cofre + validade curta, em vez de tabela de fluxos em aberto: sem estado
   no banco não há linha órfã de fluxo abandonado.
@@ -284,9 +309,24 @@ um incidente real de produção documentado no histórico do projeto anterior:
    smoke contra Postgres real (claim concorrente, troca transacional, pool
    esgotado, health check e diagnóstico de IP).
 
-   Falta para a validação de fato: credenciais Meta (App + conta
-   Business/Creator), proxies reais cadastrados no pool e a biblioteca de mídia
-   (porta `Media`) — hoje ainda no `UrlMediaResolver` de dev.
+   ✅ **Biblioteca de Mídia** implementada — com ela, o último stub de dev sai
+   do caminho do driver. `packages/media` (migration `0007`):
+   `media_folders`/`media_blobs`/`media_assets`, `FilesystemMediaStorage` atrás
+   da porta `MediaStorage`, `MediaLibrary` (upload, importação por URL, mover,
+   renomear, exclusão consistente com coletor de pendências),
+   `LibraryMediaResolver` — que substituiu o `UrlMediaResolver` no worker — e
+   `MediaServer`, que serve os bytes pela URL assinada. Rotas: pastas, upload
+   binário, importação, listagem paginada, detalhe, mover/renomear, excluir,
+   `GET /media/:id/raw` (pública, assinada) e GC. Um teste de fiação no worker
+   impede a volta do stub. Validado com 14 testes puros (storage, streaming,
+   escape de path, assinatura/expiração de URL, fiação do worker); a migration
+   `0007` e o `library.test.ts` — que exercita dedup por checksum, mover,
+   renomear e exclusão com coletor de pendências contra Postgres real —
+   **ainda não foram exercitados**, porque o Docker desta máquina travou.
+
+   Falta para a validação de fato: aplicar a `0007` e rodar o `library.test.ts`
+   contra o banco, mais credenciais Meta (App + conta Business/Creator),
+   proxies reais cadastrados no pool e mídia real na biblioteca.
 8. Driver Playwright pro que a API não cobre (Destaques etc.).
 9. Content Acquisition Driver (contas dedicadas de scraping).
 10. Escala horizontal de workers.
@@ -295,10 +335,11 @@ um incidente real de produção documentado no histórico do projeto anterior:
 
 > **Nota de ambiente:** a máquina de desenvolvimento tem **Docker Desktop**
 > (backend WSL2). O `docker-compose.yml` foi exercitado de verdade: Postgres
-> `16-alpine` + Redis `7-alpine` sobem, as 5 migrations aplicam e o módulo 8 foi
-> validado contra esse banco. O `.env` real (gitignorado) mora na raiz.
+> `16-alpine` + Redis `7-alpine` sobem, as migrations até a `0006` aplicam e os
+> módulos 8 e 9 foram validados contra esse banco (a `0007` ainda não rodou). O
+> `.env` real (gitignorado) mora na raiz.
 >
-> Duas pegadinhas desta máquina, ambas já custaram tempo:
+> Pegadinhas desta máquina, todas já custaram tempo:
 > - o `docker` do Docker Desktop instala por usuário em
 >   `%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin` — se um shell não achar
 >   `docker`, recarregue o PATH do registro;
@@ -306,7 +347,16 @@ um incidente real de produção documentado no histórico do projeto anterior:
 >   escutando na 5432. Como o Docker também publica na 5432, a conexão ia parar
 >   no Postgres errado e falhava com `28P01 senha falhou`. Por isso o `.env`
 >   local usa `POSTGRES_PORT=5433` e `DATABASE_URL` na 5433 — o serviço nativo
->   não foi mexido.
+>   não foi mexido;
+> - **não há binário de `pnpm` no PATH** — ele só existe dentro do corepack.
+>   `corepack pnpm <cmd>` não basta: scripts recursivos (`pnpm -r run
+>   typecheck`) invocam `pnpm` de novo por pacote e quebram. Use um shim
+>   `pnpm.cmd` chamando `node ...\corepack\v1\pnpm\9.15.0\bin\pnpm.cjs %*`;
+> - o **WSL2 embaixo do Docker Desktop trava** de tempos em tempos, e o sintoma
+>   engana: `docker ps` responde, mas `docker start`/`docker compose` penduram
+>   para sempre. Envolva todo comando docker em `timeout`, e não perca tempo
+>   atacando o Docker — o remédio é WSL (`wsl --shutdown`, `Restart-Service
+>   LxssManager`) e, no fim, reboot.
 >
 > Os testes de integração (`execution`, `orchestrator`) leem `DATABASE_URL`/
 > `REDIS_URL` do `.env` da raiz via `--env-file-if-exists` no script de `test`.

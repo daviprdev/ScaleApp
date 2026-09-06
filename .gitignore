@@ -4,4 +4,7 @@ dist/
 .env
 .env.*
 !.env.example
+# Storage local da biblioteca de mídia (bytes, nunca versionados)
+.data/
+
 .DS_Store

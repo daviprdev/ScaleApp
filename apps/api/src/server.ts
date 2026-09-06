@@ -8,6 +8,7 @@ import {
 } from "@scaleapp/observability";
 import type { Pool } from "pg";
 import { registerAccountRoutes } from "./routes/accounts.js";
+import { registerMediaRoutes } from "./routes/media.js";
 import { registerProxyRoutes } from "./routes/proxies.js";
 import { registerSessionRoutes, type SessionRoutesConfig } from "./routes/session.js";
 
@@ -44,6 +45,7 @@ export function buildServer(pool: Pool, sessionConfig: SessionRoutesConfig): Fas
   registerAccountRoutes(app, pool);
   registerSessionRoutes(app, pool, sessionConfig);
   registerProxyRoutes(app, pool);
+  registerMediaRoutes(app, pool);
 
   return app;
 }
